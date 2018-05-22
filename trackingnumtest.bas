@@ -4,36 +4,40 @@ Public aShipTrackCache() As Variant
 Option Explicit
 Option Compare Text
 Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
-Sub testShipTrack()
+
+Sub runShipTrack()
     Dim vTracking As Variant
     Dim sCarrier As String
     Dim sReturn As String
     Dim a() As Variant
     Dim i As Long
    
-    vTracking = "1872148784"
+    'vTracking = "1872148784" 'Delivered
+    'vTracking = "7183073402" 'Delivered
+    'vTracking = "3740172951" 'In Transit
+    'vTracking = "4887545585" 'In Transit
+    'vTracking = "4887538574"
+    'vTracking = "4887545585" 'OFD
     sCarrier = "DHL"
     sReturn = "Status"
-    'a = ShipTrackScraper(vTracking, sCarrier)
-   'For i = LBound(a) To UBound(a)
-   '    Debug.Print "-" & a(i) & "-"
-   'Next i
-    Debug.Print ""
-    Debug.Print "Tracking#- " & ShipTrack(vTracking, sCarrier, "Tracking") & ""
-    Debug.Print "Status- " & ShipTrack(vTracking, sCarrier, "Status") & ""
-    Debug.Print "Delivered- " & ShipTrack(vTracking, sCarrier, "Delivered") & ""
-    Debug.Print "RecBy- " & ShipTrack(vTracking, sCarrier, "RecBy") & ""
-    Debug.Print "ShipTo- " & ShipTrack(vTracking, sCarrier, "ShipTo") & ""
-    Debug.Print "ServiceLvl- " & ShipTrack(vTracking, sCarrier, "ServiceLvl") & ""
-    Debug.Print "Origin- " & ShipTrack(vTracking, sCarrier, "Origin") & ""
-    Debug.Print "Manifest- " & ShipTrack(vTracking, sCarrier, "Manifest") & ""
-    Debug.Print "Scheduled- " & ShipTrack(vTracking, sCarrier, "Scheduled") & ""
-    Debug.Print "TimeStamp- " & ShipTrack(vTracking, sCarrier, "TimeStamp") & ""
-   
+    
+    'Debug.Print ""
+    'Debug.Print "Status for " & vTracking & ": " & ShipTrack(vTracking, sCarrier, "Status") & ""
+    
+    For i = 6 To 24
+        If Not IsEmpty(Cells(i, "D").Value) Then
+            vTracking = Trim(Cells(i, "D").Value)
+            Cells(i, "F") = ShipTrack(vTracking, sCarrier, sReturn, True)
+            Debug.Print ""
+            Debug.Print "Status for " & vTracking & ": " & ShipTrack(vTracking, sCarrier, "Status") & ""
+        End If
+    Next i
+    
+    ieTrack.Quit
+    Set ieTrack = Nothing
  
 End Sub
- 
- 
+
 Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, Optional bRefresh As Boolean = False) As Variant
     Dim i As Long
     Dim iRow As Long
@@ -151,18 +155,8 @@ ErrHandler:
 End Function
  
 Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As Variant
-    Dim ieTagP As IHTMLElementCollection
-    Dim ieTagTD As IHTMLElementCollection
-    Dim ieTagDL As IHTMLElementCollection
-    Dim ieTagFieldSet As IHTMLElementCollection
-    Dim ieTagDD As IHTMLElementCollection
-    Dim ieTagDiv As IHTMLElementCollection
-    Dim ieTagClass As IHTMLElementCollection
-    Dim ieTagTR As IHTMLElementCollection
-    Dim ieTagH3 As IHTMLElementCollection
-    
-    Dim tableCell As IHTMLElementCollection
-    
+    Dim ieTag As IHTMLElementCollection
+    Dim sStatusElement As IHTMLElement
     Dim sURL As String
     Dim sCarrierConfirm As String
     Dim sCheck As String
@@ -225,7 +219,8 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
     'Open URL
    With ieTrack
     .navigate sURL
-    ieTrack.Visible = True
+    'ieTrack.Visible = True
+    ieTrack.Visible = False
     Do While (.Busy Or .READYSTATE <> READYSTATE_COMPLETE): DoEvents: Loop
     bPageFound = False
     bBadTracking = False
@@ -237,9 +232,9 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
             'Make sure we're on the right page
            bPageFound = False
             For i = 1 To iTimeOut
-                Set ieTagH3 = .document.getElementsByTagName("H3")
-                For j = 0 To ieTagH3.Length - 1
-                    If ieTagH3(j).innerText Like "*" & Trim(vTracking) & "*" Then
+                Set ieTag = .document.getElementsByTagName("H3")
+                For j = 0 To ieTag.Length - 1
+                    If ieTag(j).innerText Like "*" & Trim(vTracking) & "*" Then
                         bPageFound = True
                         Exit For
                     End If
@@ -253,9 +248,9 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
             'Page not found?
            If bPageFound = False Then
                 'Bad Tracking Number?
-               Set ieTagP = .document.getElementsByTagName("p")
-                For i = 0 To ieTagP.Length - 1
-                    If ieTagP(i).innerText Like "*The number you entered is not a valid tracking number*" Then
+               Set ieTag = .document.getElementsByTagName("p")
+                For i = 0 To ieTag.Length - 1
+                    If ieTag(i).innerText Like "*The number you entered is not a valid tracking number*" Then
                         bBadTracking = True
                         Exit For
                     End If
@@ -279,66 +274,66 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
            sStatus = Trim(.document.getElementById("tt_spStatus").innerText)
            
             'Delivery Date
-           Set ieTagTD = .document.getElementsByTagName("TD")
-            For i = 0 To ieTagTD.Length - 1
-                If Trim(ieTagTD(i).innerText) = "Delivered" Then
-                    sDelDate = Trim(ieTagTD(i - 2).innerText)
-                    sDelTime = Replace(Trim(ieTagTD(i - 1).innerText), ".", "")
+           Set ieTag = .document.getElementsByTagName("TD")
+            For i = 0 To ieTag.Length - 1
+                If Trim(ieTag(i).innerText) = "Delivered" Then
+                    sDelDate = Trim(ieTag(i - 2).innerText)
+                    sDelTime = Replace(Trim(ieTag(i - 1).innerText), ".", "")
                     vDelDate = CDate(sDelDate & " " & sDelTime)
                     Exit For
                 End If
             Next i
            
             'Received By
-           Set ieTagP = .document.getElementsByTagName("P")
-            For i = 0 To ieTagP.Length - 1
-                If Trim(ieTagP(i).innerText) Like "Received By:*" Then
-                    sRecBy = ieTagP(i + 1).innerText
+           Set ieTag = .document.getElementsByTagName("P")
+            For i = 0 To ieTag.Length - 1
+                If Trim(ieTag(i).innerText) Like "Received By:*" Then
+                    sRecBy = ieTag(i + 1).innerText
                     Exit For
                 End If
             Next i
            
             'Shipped To
-           Set ieTagDL = .document.getElementsByTagName("Address")
-            sShipTo = Trim(WorksheetFunction.Clean(ieTagDL(0).innerText))
+           Set ieTag = .document.getElementsByTagName("Address")
+            sShipTo = Trim(WorksheetFunction.Clean(ieTag(0).innerText))
            
             'Service Level
-           Set ieTagFieldSet = .document.getElementsByTagName("div")
-            For i = 0 To ieTagFieldSet.Length - 1
-                If Trim(ieTagFieldSet(i).innerText) Like "Service*" Then
-                    sSerLvl = Replace(Trim(ieTagFieldSet(i).innerText), "Service", "")
+           Set ieTag = .document.getElementsByTagName("div")
+            For i = 0 To ieTag.Length - 1
+                If Trim(ieTag(i).innerText) Like "Service*" Then
+                    sSerLvl = Replace(Trim(ieTag(i).innerText), "Service", "")
                     sSerLvl = WorksheetFunction.Clean(sSerLvl)
                     Exit For
                 End If
             Next i
            
             'Pickup Date
-           Set ieTagTD = .document.getElementsByTagName("TD")
-            For i = 0 To ieTagTD.Length - 1
-                If Trim(WorksheetFunction.Clean(ieTagTD(i).innerText)) = "Origin Scan" Then
-                    sOrgDate = Trim(ieTagTD(i - 2).innerText)
-                    sOrgTime = Replace(Trim(ieTagTD(i - 1).innerText), ".", "")
+           Set ieTag = .document.getElementsByTagName("TD")
+            For i = 0 To ieTag.Length - 1
+                If Trim(WorksheetFunction.Clean(ieTag(i).innerText)) = "Origin Scan" Then
+                    sOrgDate = Trim(ieTag(i - 2).innerText)
+                    sOrgTime = Replace(Trim(ieTag(i - 1).innerText), ".", "")
                     vOrgDate = CDate(sOrgDate & " " & sOrgTime)
                     Exit For
                 End If
             Next i
            
             'Manifest Date
-           Set ieTagTD = .document.getElementsByTagName("TD")
-            For i = 0 To ieTagTD.Length - 1
-                If Trim(WorksheetFunction.Clean(ieTagTD(i).innerText)) = "Order Processed: Ready for UPS" Then
-                    sManDate = Trim(ieTagTD(i - 2).innerText)
-                    sManTime = Replace(Trim(ieTagTD(i - 1).innerText), ".", "")
+           Set ieTag = .document.getElementsByTagName("TD")
+            For i = 0 To ieTag.Length - 1
+                If Trim(WorksheetFunction.Clean(ieTag(i).innerText)) = "Order Processed: Ready for UPS" Then
+                    sManDate = Trim(ieTag(i - 2).innerText)
+                    sManTime = Replace(Trim(ieTag(i - 1).innerText), ".", "")
                     vManDate = CDate(sManDate & " " & sManTime)
                     Exit For
                 End If
             Next i
            
             'Weight
-           Set ieTagDL = .document.getElementsByTagName("DL")
-            For i = 0 To ieTagDL.Length - 1
-                If Trim(ieTagDL(i).innerText) Like "Scheduled Delivery:*" Then
-                    sSchDate = Replace(Trim(ieTagDL(i).innerText), "Scheduled Delivery:", "")
+           Set ieTag = .document.getElementsByTagName("DL")
+            For i = 0 To ieTag.Length - 1
+                If Trim(ieTag(i).innerText) Like "Scheduled Delivery:*" Then
+                    sSchDate = Replace(Trim(ieTag(i).innerText), "Scheduled Delivery:", "")
                     sSchDate = WorksheetFunction.Clean(sSchDate)
                     aSchDate = Split(sSchDate, ",")
                     vSchDate = CDate(aSchDate(1))
@@ -354,9 +349,9 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
        ElseIf sCarrierConfirm = "FedEx" Then
          'Make sure we're on the right page
         For i = 1 To iTimeOut
-             Set ieTagDiv = .document.getElementsByTagName("Div")
-             For j = 0 To ieTagDiv.Length - 1
-                 If ieTagDiv(j).innerText = vTracking Then
+             Set ieTag = .document.getElementsByTagName("Div")
+             For j = 0 To ieTag.Length - 1
+                 If ieTag(j).innerText = vTracking Then
                      bCheck = True
                      Exit For
                  End If
@@ -372,9 +367,9 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
          'Page not found?
         If bPageFound = False Then
              'Bad Tracking Number?
-            Set ieTagDiv = .document.getElementsByTagName("Div")
-             For i = 0 To ieTagDiv.Length - 1
-                 If Trim(ieTagDiv(i).innerText) = "Not Found" Then
+            Set ieTag = .document.getElementsByTagName("Div")
+             For i = 0 To ieTag.Length - 1
+                 If Trim(ieTag(i).innerText) = "Not Found" Then
                      bBadTracking = True
                      Exit For
                  End If
@@ -414,10 +409,10 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
         sShipTo = .document.getElementsByClassName("address_cscp")(1).innerText
         
          'Service Level
-        Set ieTagTD = .document.getElementsByTagName("TD")
-         For i = 0 To ieTagTD.Length - 1
-             If Trim(WorksheetFunction.Clean(ieTagTD(i).innerText)) = "Service" Then
-                 sSerLvl = Trim(ieTagTD(i + 1).innerText)
+        Set ieTag = .document.getElementsByTagName("TD")
+         For i = 0 To ieTag.Length - 1
+             If Trim(WorksheetFunction.Clean(ieTag(i).innerText)) = "Service" Then
+                 sSerLvl = Trim(ieTag(i + 1).innerText)
                  Exit For
              End If
          Next i
@@ -445,13 +440,13 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
         
          'Manifest Date
         bTagFound = False
-         Set ieTagTR = .document.getElementsByTagName("TR")
-         For i = 0 To ieTagTR.Length - 1
-             If ieTagTR(i).innerHTML Like "*travel_history_header_date*" Then
-                 sManDate = WorksheetFunction.Clean(Trim(ieTagTR(i).innerText))
+         Set ieTag = .document.getElementsByTagName("TR")
+         For i = 0 To ieTag.Length - 1
+             If ieTag(i).innerHTML Like "*travel_history_header_date*" Then
+                 sManDate = WorksheetFunction.Clean(Trim(ieTag(i).innerText))
                  vManDate = CDate(Left(sManDate, 10))
              End If
-             If ieTagTR(i).innerText Like "*Shipment information sent to FedEx*" Then
+             If ieTag(i).innerText Like "*Shipment information sent to FedEx*" Then
                  bTagFound = True
                  Exit For
              End If
@@ -468,14 +463,16 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
        'DHL
        '===========================================
        Else
+        Dim sTrackNum As String
          'Make sure we're on the right page
         For i = 1 To iTimeOut
-             Set ieTagDiv = .document.getElementsByTagName("strong")
-             For j = 0 To ieTagDiv.Length - 1
-                 If ieTagDiv(j).innerText = "Waybill: " + vTracking Then
-                     bCheck = True
-                     Exit For
-                 End If
+             Set ieTag = .document.getElementsByTagName("strong")
+             For j = 0 To ieTag.Length - 1
+                sTrackNum = ieTag(j).innerText
+                If sTrackNum = "Waybill: " + vTracking Then
+                    bCheck = True
+                    Exit For
+                End If
              Next j
              On Error GoTo 0
              If bCheck = True Then
@@ -488,9 +485,9 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
          'Page not found?
         If bPageFound = False Then
              'Bad Tracking Number?
-            Set ieTagDiv = .document.getElementsByTagName("Div")
-             For i = 0 To ieTagDiv.Length - 1
-                 If Trim(ieTagDiv(i).innerText) = "Not Found" Then
+            Set ieTag = .document.getElementsByTagName("Div")
+             For i = 0 To ieTag.Length - 1
+                 If Trim(ieTag(i).innerText) = "Not Found" Then
                      bBadTracking = True
                      Exit For
                  End If
@@ -500,7 +497,6 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
                  GoTo ErrExit
                  Exit Function
              End If
-            
              'Catch all for page just not working for some reason...
              sError = "DHL - Page Not Found"
             GoTo ErrExit
@@ -511,16 +507,94 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
         On Error Resume Next
     
          'Current Status
-        Set tableCell = .document.getElementsByClassName("result-summary result-has-pieces").getElementsByTagName("tbody")(0)
-        'Debug.Print tableCell
-        sStatus = tableCell.getElementsByTagName("title")
+        Dim sTransKeyWords As String
+        Dim sStringArray() As String
+        Dim vWord As Variant
+        Dim sOut4Del As String
         
-        'sStatus = .document.getElementsByClassName("result-summary result-has-pieces").innerText
+        'Returns string results
+        Set ieTag = .document.getElementsByTagName("td")
+        sStatus = Trim(ieTag(0).Title)
+        sOut4Del = .document.getElementsByTagName("tr")(0).innerHTML
+
+        If sStatus Like "*delivered*" Then
+            sStatus = "Delivered"
+        ElseIf sOut4Del Like "*with delivery courier*" Then
+            sStatus = "Out for Delivery"
+        Else
+            sTransKeyWords = Array("arrived", "departed", "processed", "clearance", "transferred")
+            sStatus = .document.getElementsByTagName("tr")(0).innerText
+            sStringArray = Split(Replace(Replace(sStatus, Chr(10), ""), Chr(13), ""))
+            For Each vWord In sStringArray
+                If IsInArray(vWord, sTransKeyWords) Then
+                    sStatus = "In Transit"
+                    Exit For
+                End If
+            Next vWord
+
+        End If
+
+        'Debug.Print sStatus
+        
+        '"In Transit": keywords to look for when results are parsed
+        'sTransKeyWords = Array("with", "arrived", "departed", "processed", "clearance", "transferred")
+        
+        'Combines multilined result into 1 lined string and parses into array
+        'sStringArray = Split(Replace(Replace(sStatus, Chr(10), ""), Chr(13), ""))
+        
+        'If sStatus Like "*Signed for by*" Then
+        '    sStatus = "Delivered"
+        'Else
+        '    Checks if parsed string has keywords in ArrayList to check if in transit
+        '    For Each vWord In sStringArray
+        '        If IsInArray(vWord, sTransKeyWords) Then
+        '            sStatus = "In Transit"
+        '            Exit For
+        '        End If
+        '    Next vWord
+        'End If
+                
         
          'Delivery Date
-        sDelDate = .document.getElementsByClassName("snapshotController_date dest")(0).innerText
-         sDelDate = Right(sDelDate, Len(sDelDate) - 4)
-         vDelDate = CDate(sDelDate)
+        Dim iCommaPos As Integer
+        Dim iAtPos As Integer
+        Dim sDay As String
+        Dim sTime As String
+        Set ieTag = .document.getElementsByTagName("span")
+        
+        For i = 0 To ieTag.Length - 1
+            'Debug.Print i & " - " & ieTag(i + 1).innerText
+            If ieTag(i).innerText Like "*Proof of Delivery*" Or Not sStatus = "In Transit" And ieTag(i).innerText Like "Sign up for shipment notifications" Then
+                sDelDate = ieTag(i + 1).innerText
+                iCommaPos = InStr(sDelDate, ",")
+                iAtPos = InStr(sDelDate, "at")
+                'sDay = Left(sDelDate, Len(sDelDate) - iAtPos-1)
+                sTime = Right(sDelDate, Len(sDelDate) - iAtPos - 2)
+                sDay = Left(sDelDate, 3)
+                sDelDate = Mid(Left(sDelDate, iAtPos - 2), iCommaPos + 2)
+                
+                If sStatus = "Delivered" Then
+                    vDelDate = sDay & " " & CDate(sDelDate) & " " & Format(sTime, "h:mm AM/PM")
+                Else
+                    vDelDate = sDay & " " & CDate(sDelDate)
+                End If
+                    
+                sStatus = sStatus & " - " & vDelDate
+                Exit For
+            ElseIf ieTag(i).innerText Like "Estimated Delivery:" And ieTag(i + 2).innerText Like "By End of Day" Then
+                sDelDate = ieTag(i + 1).innerText
+                iCommaPos = InStr(sDelDate, ",")
+                'sDay = Left(sDelDate, iCommaPos - 1)
+                sDay = Left(sDelDate, 3)
+                sDelDate = Right(sDelDate, Len(sDelDate) - iCommaPos - 1)
+                vDelDate = sDay & " " & CDate(sDelDate)
+                sStatus = sStatus & " - " & vDelDate
+                Exit For
+            Else
+                vDelDate = ""
+            End If
+        Next i
+        
         
          'Received By
         sRecBy = .document.getElementsByClassName("statusChevron_sub_status bogus")(0).innerText
@@ -532,12 +606,12 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
         
          'Shipped To
         sShipTo = .document.getElementsByClassName("address_cscp")(1).innerText
-        
+
          'Service Level
-        Set ieTagTD = .document.getElementsByTagName("TD")
-         For i = 0 To ieTagTD.Length - 1
-             If Trim(WorksheetFunction.Clean(ieTagTD(i).innerText)) = "Service" Then
-                 sSerLvl = Trim(ieTagTD(i + 1).innerText)
+        Set ieTag = .document.getElementsByTagName("TD")
+         For i = 0 To ieTag.Length - 1
+             If Trim(WorksheetFunction.Clean(ieTag(i).innerText)) = "Service" Then
+                 sSerLvl = Trim(ieTag(i + 1).innerText)
                  Exit For
              End If
          Next i
@@ -547,31 +621,15 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
          sOrgDate = Right(sOrgDate, Len(sOrgDate) - 4)
          vOrgDate = CDate(sOrgDate)
         
-         'Pickup Date
-        'Set ieTagTR = .document.getElementsByTagName("TR")
-        'For i = 0 To ieTagTR.Length - 1
-        '    If ieTagTR(i).innerHTML Like "*travel_history_header_date*" Then
-        '        sOrgDate = WorksheetFunction.Clean(Trim(ieTagTR(i).innerText))
-        '        vOrgDate = CDate(Left(sOrgDate, 10))
-        '    End If
-        '    If ieTagTR(i).innerText Like "*Picked up*" Then
-        '        bTagFound = True
-        '        Exit For
-        '    End If
-        'Next i
-        'If bTagFound = False Then
-        '    vOrgDate = ""
-        'End If
-        
          'Manifest Date
         bTagFound = False
-         Set ieTagTR = .document.getElementsByTagName("TR")
-         For i = 0 To ieTagTR.Length - 1
-             If ieTagTR(i).innerHTML Like "*travel_history_header_date*" Then
-                 sManDate = WorksheetFunction.Clean(Trim(ieTagTR(i).innerText))
+         Set ieTag = .document.getElementsByTagName("TR")
+         For i = 0 To ieTag.Length - 1
+             If ieTag(i).innerHTML Like "*travel_history_header_date*" Then
+                 sManDate = WorksheetFunction.Clean(Trim(ieTag(i).innerText))
                  vManDate = CDate(Left(sManDate, 10))
              End If
-             If ieTagTR(i).innerText Like "*Shipment information sent to FedEx*" Then
+             If ieTag(i).innerText Like "*Shipment information sent to FedEx*" Then
                  bTagFound = True
                  Exit For
              End If
@@ -579,10 +637,7 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
          If bTagFound = False Then
              vManDate = ""
          End If
-        
-         'Delivery Date
-        vSchDate = CDate(Left(sDelDate, 10))
-        
+
         
         End If
     End With
@@ -597,9 +652,7 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
     aTrackData(7) = vSchDate
  
     ShipTrackScraper = aTrackData
-    
-    'ieTrack.Quit
-    'Set ieTrack = Nothing
+        
     On Error GoTo 0
     Exit Function
    
@@ -617,6 +670,10 @@ ErrExit::
     'ieTrack.Quit
     'Set ieTrack = Nothing
     On Error GoTo 0
+End Function
+
+Function IsInArray(stringToBeFound As Variant, arr As String) As Boolean
+  IsInArray = UBound(Filter(arr, stringToBeFound)) > -1
 End Function
 
 
