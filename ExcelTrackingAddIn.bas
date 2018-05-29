@@ -6,37 +6,101 @@ Option Compare Text
 Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 
 Sub runShipTrack()
+    
     Dim vTracking As Variant
     Dim sCarrier As String
     Dim sReturn As String
-    Dim a() As Variant
     Dim i As Long
-   
-    'vTracking = "1872148784" 'Delivered
-    'vTracking = "7183073402" 'Delivered
-    'vTracking = "3740172951" 'In Transit
-    'vTracking = "4887545585" 'In Transit
-    'vTracking = "4887538574"
-    'vTracking = "4887545585" 'OFD
+    Dim bDebug As Boolean
+    
     sCarrier = "DHL"
     sReturn = "Status"
+
+    bDebug = False
     
-    'Debug.Print ""
-    'Debug.Print "Status for " & vTracking & ": " & ShipTrack(vTracking, sCarrier, "Status") & ""
-    
-    For i = 6 To 24
-        If Not IsEmpty(Cells(i, "D").Value) Then
-            vTracking = Trim(Cells(i, "D").Value)
-            Cells(i, "F") = ShipTrack(vTracking, sCarrier, sReturn, True)
+    On Error GoTo errHandler
+        Sheets("Intransit").Activate
+        
+        If bDebug = True Then
+            vTracking = "4887538574"
+            'vTracking = "7392788211"
             Debug.Print ""
             Debug.Print "Status for " & vTracking & ": " & ShipTrack(vTracking, sCarrier, "Status") & ""
+        Else
+            Dim lLastRow As Long, lLastColumn As Long
+            Dim rStartCell As Range
+            Dim rCellRange As Range
+            Dim rCell As Range
+            Dim sLastColumn As String, sLastRow As String
+            Dim vString As Variant
+            Dim sString As String
+            Dim sTrackCol As Variant, sTrackRow As Variant
+            Dim sDelCol As Variant, sDelRow As Variant
+            Dim sStatusCol As Variant, sStatusRow As Variant
+            Dim regEx As Object
+            
+            'Regex properties to use on tracking number
+            Set regEx = CreateObject("vbscript.regexp")
+            With regEx
+                .Global = True
+                .IgnoreCase = True
+                .Pattern = "[0-9]{10}"
+            End With
+            
+            'Get range of worksheet to iterate through for searching
+            Set rStartCell = Range("C3")
+            lLastRow = rStartCell.SpecialCells(xlCellTypeLastCell).Row
+            lLastColumn = rStartCell.SpecialCells(xlCellTypeLastCell).Column
+            sString = Col_Letter(lLastColumn) & lLastRow
+            vString = sString
+            
+            'Get cell coordinates of 'tracking' and 'delivery' column
+            For Each rCell In Range("A1", vString)
+                If rCell.Value Like "*tracking*" Then
+                    sTrackCol = Trim(Col_Letter(rCell.Column))
+                    sTrackRow = Trim(rCell.Row)
+                End If
+                If Not IsNull(sTrackCol) And rCell.Value Like "*delivery*" Then
+                    sDelCol = Trim(Col_Letter(rCell.Column))
+                    sDelRow = Trim(rCell.Row)
+                    
+                    If Not IsNull(sTrackCol) And rCell.Value Like "*status*" Or Not rCell.Value Like "*status*" Then
+                        Cells(rCell.Row, Col_Letter(rCell.Column + 1)) = "Last Status"
+                        sStatusCol = Trim(Col_Letter(rCell.Column + 1))
+                        sStatusRow = Trim(rCell.Row)
+                        Exit For
+                    End If
+                End If
+                
+            Next rCell
+            
+            'Check down column if cell has a value and pass it into regex, if valid, perform status tracking
+            For i = sTrackRow To lLastRow
+                If regEx.test(Cells(i, sTrackCol).Value) Then
+                    vTracking = Trim(Cells(i, sTrackCol).Value)
+                    Cells(i, sDelCol) = ShipTrack(vTracking, sCarrier, sReturn, True)
+                    Cells(i, sStatusCol) = ShipTrack(vTracking, sCarrier, "TransitStatus")
+                    'Debug.Print ""
+                    'Debug.Print "Status for " & vTracking & ": " & ShipTrack(vTracking, sCarrier, "Status") & ""
+                End If
+            Next i
+            
+            ieTrack.Quit
+            Set ieTrack = Nothing
         End If
-    Next i
-    
-    ieTrack.Quit
-    Set ieTrack = Nothing
- 
+        Exit Sub
+        
+errHandler:
+    MsgBox Err.Description
+    Exit Sub
 End Sub
+
+'Takes Long number and converts to cooresponding lettered column
+Function Col_Letter(lngCol As Long) As String
+    Dim vArr
+    vArr = Split(Cells(1, lngCol).Address(True, False), "$")
+    Col_Letter = vArr(0)
+End Function
 
 Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, Optional bRefresh As Boolean = False) As Variant
     Dim i As Long
@@ -50,6 +114,7 @@ Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, 
     Dim vOrgDate As Variant
     Dim vManDate As Variant
     Dim vSchDate As Variant
+    Dim sTransitStatus As String
     Dim dblTimeStamp As Double
     Dim aShipTrackScrape() As Variant
     Dim dblStart As Double
@@ -59,7 +124,7 @@ Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, 
    On Error Resume Next
     i = UBound(aShipTrackCache, 2)
     If Err.Number <> 0 Then
-        ReDim aShipTrackCache(0 To 9, 0 To 0)
+        ReDim aShipTrackCache(0 To 10, 0 To 0)
     End If
     On Error GoTo 0
    
@@ -84,7 +149,8 @@ Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, 
         vOrgDate = aShipTrackCache(6, iRow)
         vManDate = aShipTrackCache(7, iRow)
         vSchDate = aShipTrackCache(8, iRow)
-        dblTimeStamp = aShipTrackCache(9, iRow)
+        sTransitStatus = aShipTrackCache(9, iRow)
+        dblTimeStamp = aShipTrackCache(10, iRow)
         GoTo PrintInfo
     End If
    
@@ -94,7 +160,7 @@ Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, 
             iRow = 0
         Else
             iRow = UBound(aShipTrackCache, 2) + 1
-            ReDim Preserve aShipTrackCache(9, iRow)
+            ReDim Preserve aShipTrackCache(10, iRow)
         End If
     End If
    
@@ -118,7 +184,8 @@ Function ShipTrack(vTracking As Variant, sCarrier As String, sReturn As String, 
     aShipTrackCache(6, iRow) = aShipTrackScrape(5)
     aShipTrackCache(7, iRow) = aShipTrackScrape(6)
     aShipTrackCache(8, iRow) = aShipTrackScrape(7)
-    aShipTrackCache(9, iRow) = dblTimeStamp
+    aShipTrackCache(9, iRow) = aShipTrackScrape(8)
+    aShipTrackCache(10, iRow) = dblTimeStamp
    
 PrintInfo::
     Select Case sReturn
@@ -140,13 +207,15 @@ PrintInfo::
             ShipTrack = aShipTrackCache(7, iRow)
         Case Is = "Scheduled"
             ShipTrack = aShipTrackCache(8, iRow)
-        Case Is = "TimeStamp"
+        Case Is = "TransitStatus"
             ShipTrack = aShipTrackCache(9, iRow)
+        Case Is = "TimeStamp"
+            ShipTrack = aShipTrackCache(10, iRow)
     End Select
    
     Exit Function
    
-ErrHandler:
+errHandler:
     Debug.Print Err.Description
     ShipTrack = "Error"
     ieTrack.Quit
@@ -179,6 +248,7 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
     Dim sManDate As String
     Dim sManTime As String
     Dim vManDate As Variant
+    Dim sTransitStatus As String
     Dim dblWeight As Double
     Dim sSchDate As String
     Dim aSchDate() As String
@@ -190,7 +260,7 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
  
     'Some constants
    iTimeOut = 10
-    ReDim aTrackData(0 To 7)
+    ReDim aTrackData(0 To 8)
  
     'What carrier are we using? Exit if unknown
    If sCarrier = "UPS" Then
@@ -533,67 +603,92 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
             Next vWord
 
         End If
-
-        'Debug.Print sStatus
-        
-        '"In Transit": keywords to look for when results are parsed
-        'sTransKeyWords = Array("with", "arrived", "departed", "processed", "clearance", "transferred")
-        
-        'Combines multilined result into 1 lined string and parses into array
-        'sStringArray = Split(Replace(Replace(sStatus, Chr(10), ""), Chr(13), ""))
-        
-        'If sStatus Like "*Signed for by*" Then
-        '    sStatus = "Delivered"
-        'Else
-        '    Checks if parsed string has keywords in ArrayList to check if in transit
-        '    For Each vWord In sStringArray
-        '        If IsInArray(vWord, sTransKeyWords) Then
-        '            sStatus = "In Transit"
-        '            Exit For
-        '        End If
-        '    Next vWord
-        'End If
-                
-        
+               
+            
          'Delivery Date
         Dim iCommaPos As Integer
         Dim iAtPos As Integer
-        Dim sDay As String
         Dim sTime As String
+        Dim sDay As String
         Set ieTag = .document.getElementsByTagName("span")
         
         For i = 0 To ieTag.Length - 1
-            'Debug.Print i & " - " & ieTag(i + 1).innerText
-            If ieTag(i).innerText Like "*Proof of Delivery*" Or Not sStatus = "In Transit" And ieTag(i).innerText Like "Sign up for shipment notifications" Then
+            'Debug.Print i & " - " & ieTag(i).innerText
+            'sStatus is "Delivered"
+            If sStatus = "Delivered" And ieTag(i).innerText Like "*Proof of Delivery*" Then
                 sDelDate = ieTag(i + 1).innerText
                 iCommaPos = InStr(sDelDate, ",")
                 iAtPos = InStr(sDelDate, "at")
-                'sDay = Left(sDelDate, Len(sDelDate) - iAtPos-1)
-                sTime = Right(sDelDate, Len(sDelDate) - iAtPos - 2)
+                sTime = Format(Right(sDelDate, Len(sDelDate) - iAtPos - 2), "h:mm AM/PM")
                 sDay = Left(sDelDate, 3)
-                sDelDate = Mid(Left(sDelDate, iAtPos - 2), iCommaPos + 2)
-                
-                If sStatus = "Delivered" Then
-                    vDelDate = sDay & " " & CDate(sDelDate) & " " & Format(sTime, "h:mm AM/PM")
-                Else
-                    vDelDate = sDay & " " & CDate(sDelDate)
-                End If
-                    
+                sDelDate = Format(CDate(Mid(Left(sDelDate, iAtPos - 2), iCommaPos + 2)), "m/d/yy")
+                vDelDate = sDay & " " & sDelDate & " " & sTime
+
                 sStatus = sStatus & " - " & vDelDate
                 Exit For
-            ElseIf ieTag(i).innerText Like "Estimated Delivery:" And ieTag(i + 2).innerText Like "By End of Day" Then
+            'sStatus is "Out for Delivery"
+            ElseIf sStatus Like "Out for Delivery" And ieTag(i).innerText Like "*Origin Service Area*" Then
+                sDelDate = ieTag(i - 1).innerText
+                iCommaPos = InStr(sDelDate, ",")
+                iAtPos = InStr(sDelDate, "at")
+                sTime = Right(sDelDate, Len(sDelDate) - iAtPos - 2)
+                sDay = Left(sDelDate, 3)
+                sDelDate = Format(CDate(Mid(Left(sDelDate, iAtPos - 2), iCommaPos + 2)), "m/d/yy")
+                
+                sStatus = sStatus & " - " & sDelDate
+                Exit For
+            'sStatus is "In Transit"
+            ElseIf sStatus = "In Transit" And ieTag(i).innerText Like "Estimated Delivery:" Then
                 sDelDate = ieTag(i + 1).innerText
                 iCommaPos = InStr(sDelDate, ",")
-                'sDay = Left(sDelDate, iCommaPos - 1)
                 sDay = Left(sDelDate, 3)
-                sDelDate = Right(sDelDate, Len(sDelDate) - iCommaPos - 1)
-                vDelDate = sDay & " " & CDate(sDelDate)
+                sDelDate = Format(CDate(Right(sDelDate, Len(sDelDate) - iCommaPos - 1)), "m/d/yy")
+                vDelDate = sDay & " " & sDelDate
                 sStatus = sStatus & " - " & vDelDate
+                Exit For
+            ElseIf ieTag(i).innerText Like "*Please try again later*" Then
+                sStatus = sStatus & " - ETA Not Available"
                 Exit For
             Else
                 vDelDate = ""
             End If
         Next i
+        
+        '"TransitStatus" - If not "Delivered", Get Last Location & Status
+        Dim iWordIndx As Integer
+        Dim sLastUpdate As String
+        Dim sLastLoc() As String
+        Set ieTag = .document.getElementsByTagName("table")
+        
+        If Not sStatus Like "*delivered*" Then
+            'Get day of last updated location
+            For i = 0 To ieTag.Length - 1
+                'Debug.Print i & " - " & ieTag(i).innerText
+                If ieTag(i).Summary Like "*checkpoints*" Then
+                    sDelDate = .document.getElementsByTagName("th")(0).innerText
+                    iCommaPos = InStr(sDelDate, ",")
+                    sDelDate = Format(CDate(Right(sDelDate, Len(sDelDate) - iCommaPos - 1)), "m/d/yy")  'last updated date
+
+                    Set ieTag = ieTag(i).document.getElementsByTagName("tbody")(1).getElementsByTagName("td")
+                    sLastUpdate = ieTag(1).innerText
+                    sLastLoc = Split(ieTag(2).innerText)
+                    
+                    For Each vWord In sLastLoc
+                        'Check if location is included in last status update, if so, replace with "City, State - Country" Format
+                        If InStr(sLastUpdate, vWord) Then
+                            iWordIndx = InStr(sLastUpdate, vWord)
+                            sTransitStatus = sDelDate + " - " + Left(sLastUpdate, iWordIndx - 1) + ieTag(2).innerText
+                            Exit For
+                        Else
+                            sTransitStatus = sDelDate + " - " + sLastUpdate + " in " + ieTag(2).innerText
+                            Exit For
+                        End If
+                    Next vWord
+                    
+                    Exit For
+                End If
+            Next i
+        End If
         
         
          'Received By
@@ -650,6 +745,7 @@ Private Function ShipTrackScraper(vTracking As Variant, sCarrier As String) As V
     aTrackData(5) = vOrgDate
     aTrackData(6) = vManDate
     aTrackData(7) = vSchDate
+    aTrackData(8) = sTransitStatus
  
     ShipTrackScraper = aTrackData
         
@@ -665,6 +761,7 @@ ErrExit::
     aTrackData(5) = sError
     aTrackData(6) = sError
     aTrackData(7) = sError
+    aTrackData(8) = sError
    
     ShipTrackScraper = aTrackData
     'ieTrack.Quit
