@@ -1,5 +1,5 @@
 # ShipTrack Tracking Number Script
-Excel Script that retrives the following from a tracking number:
+Excel Script that retrieves the following from a tracking number:
 - Status
 - Delivery Date
 - Received By
