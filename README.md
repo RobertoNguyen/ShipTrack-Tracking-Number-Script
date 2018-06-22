@@ -28,7 +28,7 @@ Attach the add-in to ribbon bar for easy access
 - File -> Options -> Quick Access Toolbar -> Choose commands from -> Macros -> Select the macro -> Add >> -> Ok
 
 ### Installation Method 2
-Add button to worksheet and assign macro to it. _
-Activate “Developer” tab in Options _
-Insert Button (Form Control) and drag cell area to create custom sized button _
-Right click on button -> Assign Macro… _
+Add button to worksheet and assign macro to it.  
+Activate “Developer” tab in Options  
+Insert Button (Form Control) and drag cell area to create custom sized button  
+Right click on button -> Assign Macro…  
