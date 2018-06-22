@@ -1,4 +1,3 @@
-Attribute VB_Name = "Module1"
 Public ieTrack As InternetExplorer
 Public aShipTrackCache() As Variant
 Option Explicit
@@ -6,6 +5,11 @@ Option Compare Text
 Public Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 
 Sub runShipTrack()
+
+    'Start Optimization of code
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
     
     Dim vTracking As Variant
     Dim sCarrier As String
@@ -89,6 +93,11 @@ Sub runShipTrack()
             Set ieTrack = Nothing
         End If
         Exit Sub
+        
+    'End Optimization, reset to defaults
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
         
 errHandler:
     MsgBox Err.Description
@@ -772,5 +781,3 @@ End Function
 Function IsInArray(stringToBeFound As Variant, arr As String) As Boolean
   IsInArray = UBound(Filter(arr, stringToBeFound)) > -1
 End Function
-
-
