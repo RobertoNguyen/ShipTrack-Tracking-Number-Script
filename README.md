@@ -13,13 +13,13 @@ Excel Script that retrieves the following return result from a tracking number:
 - Origin - location the package came from
 - TimeStamp - last time the program cache was updated
 
-### **Excel Function Formula and Requirements**
+### Excel Function Formula and Requirements
 - =ShipTrack(“tracking#”, “carrier”, “returnresult”, TRUE)
   - “tracking#” - must be quoted
   - "carrier" - available carriers: DHL, FedEx, UPS. Must be quoted
   - "returnresult" - list of available returns above must be quoted
   
-### **Installation Method 1**
+### Installation Method 1
 Drop TrackStatus.xlam in Microsoft Add-In folder:
 - C:\Users\USERNAME\AppData\Roaming\Microsoft\AddIns
 Activate the add-in in Excel. 
@@ -27,7 +27,7 @@ Activate the add-in in Excel.
 Attach the add-in to ribbon bar for easy access
 - File -> Options -> Quick Access Toolbar -> Choose commands from -> Macros -> Select the macro -> Add >> -> Ok
 
-### **Installation Method 2**
+### Installation Method 2
 Add button to worksheet and assign macro to it.
 Activate “Developer” tab in Options
 Insert Button (Form Control) and drag cell area to create custom sized button
